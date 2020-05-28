@@ -119,12 +119,12 @@ var VideoChat = {
     // Add listeners to the websocket
     VideoChat.socket.on("offer", VideoChat.onOffer);
     VideoChat.socket.on("ready", VideoChat.readyToCall);
-    VideoChat.socket.on("willInitiateCall", () => (VideoChat.willInitiateCall = true));
+    VideoChat.socket.on("willInitiateCall", function() {VideoChat.willInitiateCall = true});
   },
 
   identify: function (uuid) {
     logIt("Identifying self to room")
-    if (VideoChat.peerConnections[uuid] != "default") {
+    if (VideoChat.peerConnections[uuid] == null) {
       VideoChat.peerConnections[uuid] = "default";
     }
     VideoChat.socket.emit("identify", roomHash, VideoChat.uuid);
@@ -132,7 +132,7 @@ var VideoChat = {
 
   registerPeer: function (uuid) {
     logIt("Registering peer", uuid)
-    if (VideoChat.peerConnections[uuid] != "default") {
+    if (VideoChat.peerConnections[uuid] == null) {
       VideoChat.peerConnections[uuid] = "default";
     }
   },
@@ -210,7 +210,7 @@ var VideoChat = {
           case "connected":
             logIt("connected");
             // Once connected we no longer have a need for the signaling server, so disconnect
-            VideoChat.socket.disconnect();
+            // VideoChat.socket.disconnect();
             break;
           case "disconnected":
             logIt("disconnected");
@@ -324,7 +324,10 @@ var VideoChat = {
   onAnswer: function (answer, uuid) {
     logIt("onAnswer <<< Received answer");
     var rtcAnswer = new RTCSessionDescription(JSON.parse(answer));
-    // Set remote description of RTCSession
+    // Set remote description of RTCSession]
+
+    console.log("onAnswer CHECK", VideoChat.peerConnections, uuid)
+
     VideoChat.peerConnections[uuid].setRemoteDescription(rtcAnswer);
     // The caller now knows that the callee is ready to accept new ICE candidates, so sending the buffer over
     VideoChat.localICECandidates.forEach((candidate) => {
