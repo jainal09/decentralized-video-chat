@@ -164,8 +164,6 @@ var VideoChat = {
         iceServers: token.iceServers,
       });
 
-      console.log(VideoChat.peerConnections);
-
       // Add the local video stream to the peerConnection.
       VideoChat.localStream.getTracks().forEach(function (track) {
         VideoChat.peerConnections[uuid].addTrack(track, VideoChat.localStream);
@@ -277,7 +275,6 @@ var VideoChat = {
         // If the offer is created successfully, set it as the local description
         // and send it over the socket connection to initiate the peerConnection
         // on the other side.
-        console.log(uuid);
         VideoChat.peerConnections[uuid].setLocalDescription(offer);
         VideoChat.socket.emit("offer", JSON.stringify(offer), roomHash, uuid);
       },
@@ -298,8 +295,6 @@ var VideoChat = {
     return function () {
       logIt(">>> Creating answer...");
       rtcOffer = new RTCSessionDescription(JSON.parse(offer));
-      console.log(VideoChat.peerConnections);
-      console.log(uuid);
       VideoChat.peerConnections[uuid].setRemoteDescription(rtcOffer);
       VideoChat.peerConnections[uuid].createAnswer(
         function (answer) {
@@ -335,7 +330,7 @@ var VideoChat = {
     VideoChat.localICECandidates.forEach((candidate) => {
       logIt(`>>> Sending local ICE candidate (${candidate.address})`);
       // Send ice candidate over websocket
-      VideoChat.socket.emit("candidate", JSON.stringify(candidate), roomHash);
+      VideoChat.socket.emit("candidate", JSON.stringify(candidate), roomHash, uuid);
     });
     // Reset the buffer of local ICE candidates. This is not really needed, but it's good practice
     VideoChat.localICECandidates = [];
