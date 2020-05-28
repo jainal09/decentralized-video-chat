@@ -70,28 +70,38 @@ function logIt(msg, room) {
 
 // When a socket connects, set up the specific listeners we will use.
 io.on("connection", function (socket) {
+
+  socket.on("joinRoom", function (room, uuid) {
+    logIt("A client is joining room", room);    
+    socket.join(room);
+    // tell all in room to identify themselves to uuid
+    socket.broadcast.to(room).emit("pleaseIdentify", uuid);
+  });
+
+  socket.on("identify", function (room, uuid) {
+    logIt("A client is identifying to a room", room);    
+    socket.broadcast.to(room).emit("registerPeer", uuid);
+  });
+
   // When a client tries to join a room, only allow them if they are first or
   // second in the room. Otherwise it is full.
-  socket.on("join", function (room, uuid) {
-    console.log(room, uuid);
-    logIt("A client joined the room", room);
+  socket.on("joinCall", function (room, uuid) {
+    logIt("A client is joining call", room);
     var clients = io.sockets.adapter.rooms[room];
     var numClients = typeof clients !== "undefined" ? clients.length : 0;
-    if (numClients === 0) {
-      socket.join(room);
-    } else if (numClients === 1) {
-      socket.join(room);
+    if (numClients === 5) {
+      logIt("room already full", room);
+      socket.emit("full", room);
+    } else {
       // When the client is second to join the room, both clients are ready.
       logIt("Broadcasting ready message", room);
       // First to join call initiates call
       socket.broadcast.to(room).emit("willInitiateCall", room);
       socket.emit("ready", room, uuid).to(room);
       socket.broadcast.to(room).emit("ready", room, uuid);
-    } else {
-      logIt("room already full", room);
-      socket.emit("full", room);
     }
   });
+
 
   // When receiving the token message, use the Twilio REST API to request an
   // token to get ephemeral credentials to use the TURN server.

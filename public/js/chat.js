@@ -99,17 +99,42 @@ var VideoChat = {
         Snackbar.close();
       },
     });
+
+    console.log("My UUID is: ", VideoChat.uuid);
+
     VideoChat.localVideo.srcObject = stream;
-    // Now we're ready to join the chat room.
-    VideoChat.socket.emit("join", roomHash, VideoChat.uuid);
+
+    // Join the room so we can identify ourselves.
+    VideoChat.socket.emit("joinRoom", roomHash, VideoChat.uuid);
+
+    // Identify yourself to the chat room.
+    VideoChat.socket.on("pleaseIdentify", VideoChat.identify);
+
+    // Identify someone else in the room.
+    VideoChat.socket.on("registerPeer", VideoChat.registerPeer);
+
+    // Now we're ready to join the call.
+    VideoChat.socket.emit("joinCall", roomHash, VideoChat.uuid);
+
     // Add listeners to the websocket
-    VideoChat.socket.on("full", chatRoomFull);
     VideoChat.socket.on("offer", VideoChat.onOffer);
     VideoChat.socket.on("ready", VideoChat.readyToCall);
-    VideoChat.socket.on(
-      "willInitiateCall",
-      () => (VideoChat.willInitiateCall = true)
-    );
+    VideoChat.socket.on("willInitiateCall", () => (VideoChat.willInitiateCall = true));
+  },
+
+  identify: function (uuid) {
+    logIt("Identifying self to room")
+    if (VideoChat.peerConnections[uuid] != "default") {
+      VideoChat.peerConnections[uuid] = "default";
+    }
+    VideoChat.socket.emit("identify", roomHash, VideoChat.uuid);
+  },
+
+  registerPeer: function (uuid) {
+    logIt("Registering peer", uuid)
+    if (VideoChat.peerConnections[uuid] != "default") {
+      VideoChat.peerConnections[uuid] = "default";
+    }
   },
 
   // When we are ready to call, enable the Call button.
@@ -252,6 +277,7 @@ var VideoChat = {
         // If the offer is created successfully, set it as the local description
         // and send it over the socket connection to initiate the peerConnection
         // on the other side.
+        console.log(uuid);
         VideoChat.peerConnections[uuid].setLocalDescription(offer);
         VideoChat.socket.emit("offer", JSON.stringify(offer), roomHash, uuid);
       },
@@ -292,12 +318,11 @@ var VideoChat = {
   // ephemeral token is returned from Twilio.
   onOffer: function (offer, uuid) {
     logIt("onOffer <<< Received offer");
-    console.log("onoffer", uuid); // onoffer seems to be getting uuid, but createanswer seems to be getting null
     VideoChat.socket.on(
       "token",
       VideoChat.onToken(VideoChat.createAnswer(offer, uuid))
     );
-    VideoChat.socket.emit("token", roomHash);
+    VideoChat.socket.emit("token", roomHash, uuid);
   },
 
   // When an answer is received, add it to the peerConnection as the remote description.
