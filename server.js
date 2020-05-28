@@ -118,9 +118,9 @@ io.on("connection", function (socket) {
   });
 
   // Relay candidate messages
-  socket.on("candidate", function (candidate, room) {
+  socket.on("candidate", function (candidate, room, uuid) {
     logIt("Received candidate. Broadcasting...", room);
-    socket.broadcast.to(room).emit("candidate", candidate);
+    socket.broadcast.to(room).emit("candidate", candidate, uuid);
   });
 
   // Relay offers
@@ -130,9 +130,9 @@ io.on("connection", function (socket) {
   });
 
   // Relay answers
-  socket.on("answer", function (answer, room) {
+  socket.on("answer", function (answer, room, uuid) {
     logIt("Received answer. Broadcasting...", room);
-    socket.broadcast.to(room).emit("answer", answer);
+    socket.broadcast.to(room).emit("answer", answer, uuid);
   });
 });
 

@@ -164,7 +164,6 @@ var VideoChat = {
         iceServers: token.iceServers,
       });
 
-      console.log(token, uuid)
       console.log(VideoChat.peerConnections);
 
       // Add the local video stream to the peerConnection.
@@ -245,7 +244,8 @@ var VideoChat = {
         VideoChat.socket.emit(
           "candidate",
           JSON.stringify(event.candidate),
-          roomHash
+          roomHash,
+          VideoChat.uuid // could be remote uuid
         );
       } else {
         // If we are not 'connected' to the other peer, we are buffering the local ICE candidates.
@@ -259,14 +259,14 @@ var VideoChat = {
 
   // When receiving a candidate over the socket, turn it back into a real
   // RTCIceCandidate and add it to the peerConnection.
-  onCandidate: function (candidate) {
+  onCandidate: function (candidate, uuid) {
     // Update caption text
     captionText.text("Found other user... connecting");
     rtcCandidate = new RTCIceCandidate(JSON.parse(candidate));
     logIt(
       `onCandidate <<< Received remote ICE candidate (${rtcCandidate.address} - ${rtcCandidate.relatedAddress})`
     );
-    VideoChat.peerConnections[0].addIceCandidate(rtcCandidate);
+    VideoChat.peerConnections[uuid].addIceCandidate(rtcCandidate);
   },
 
   // Create an offer that contains the media capabilities of the browser.
@@ -304,7 +304,7 @@ var VideoChat = {
       VideoChat.peerConnections[uuid].createAnswer(
         function (answer) {
           VideoChat.peerConnections[uuid].setLocalDescription(answer);
-          VideoChat.socket.emit("answer", JSON.stringify(answer), roomHash);
+          VideoChat.socket.emit("answer", JSON.stringify(answer), roomHash, uuid);
         },
         function (err) {
           logIt("Failed answer creation.");
@@ -326,11 +326,11 @@ var VideoChat = {
   },
 
   // When an answer is received, add it to the peerConnection as the remote description.
-  onAnswer: function (answer) {
+  onAnswer: function (answer, uuid) {
     logIt("onAnswer <<< Received answer");
     var rtcAnswer = new RTCSessionDescription(JSON.parse(answer));
     // Set remote description of RTCSession
-    VideoChat.peerConnections[0].setRemoteDescription(rtcAnswer);
+    VideoChat.peerConnections[uuid].setRemoteDescription(rtcAnswer);
     // The caller now knows that the callee is ready to accept new ICE candidates, so sending the buffer over
     VideoChat.localICECandidates.forEach((candidate) => {
       logIt(`>>> Sending local ICE candidate (${candidate.address})`);
