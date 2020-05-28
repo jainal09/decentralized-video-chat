@@ -72,7 +72,8 @@ function logIt(msg, room) {
 io.on("connection", function (socket) {
   // When a client tries to join a room, only allow them if they are first or
   // second in the room. Otherwise it is full.
-  socket.on("join", function (room) {
+  socket.on("join", function (room, uuid) {
+    console.log(room, uuid);
     logIt("A client joined the room", room);
     var clients = io.sockets.adapter.rooms[room];
     var numClients = typeof clients !== "undefined" ? clients.length : 0;
@@ -84,8 +85,8 @@ io.on("connection", function (socket) {
       logIt("Broadcasting ready message", room);
       // First to join call initiates call
       socket.broadcast.to(room).emit("willInitiateCall", room);
-      socket.emit("ready", room).to(room);
-      socket.broadcast.to(room).emit("ready", room);
+      socket.emit("ready", room, uuid).to(room);
+      socket.broadcast.to(room).emit("ready", room, uuid);
     } else {
       logIt("room already full", room);
       socket.emit("full", room);
@@ -94,14 +95,14 @@ io.on("connection", function (socket) {
 
   // When receiving the token message, use the Twilio REST API to request an
   // token to get ephemeral credentials to use the TURN server.
-  socket.on("token", function (room) {
+  socket.on("token", function (room, uuid) {
     logIt("Received token request", room);
     twilio.tokens.create(function (err, response) {
       if (err) {
         logIt(err, room);
       } else {
         logIt("Token generated. Returning it to the browser client", room);
-        socket.emit("token", response).to(room);
+        socket.emit("token", response, uuid).to(room);
       }
     });
   });
@@ -113,9 +114,9 @@ io.on("connection", function (socket) {
   });
 
   // Relay offers
-  socket.on("offer", function (offer, room) {
+  socket.on("offer", function (offer, room, uuid) {
     logIt("Received offer. Broadcasting...", room);
-    socket.broadcast.to(room).emit("offer", offer);
+    socket.broadcast.to(room).emit("offer", offer, uuid);
   });
 
   // Relay answers

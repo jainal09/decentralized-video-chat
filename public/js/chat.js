@@ -26,6 +26,13 @@ const captionButtontext = $("#caption-button-text");
 const entireChat = $("#entire-chat");
 const chatZone = $("#chat-zone");
 
+function uuid() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 var VideoChat = {
   connected: false,
   willInitiateCall: false,
@@ -34,6 +41,8 @@ var VideoChat = {
   remoteVideo: document.getElementById("remote-video"),
   localVideo: document.getElementById("local-video"),
   recognition: undefined,
+  peerConnections: {},
+  uuid: uuid(),
 
   // Call to getUserMedia (provided by adapter.js for cross browser compatibility)
   // asking for access to both the video and audio streams. If the request is
@@ -92,7 +101,7 @@ var VideoChat = {
     });
     VideoChat.localVideo.srcObject = stream;
     // Now we're ready to join the chat room.
-    VideoChat.socket.emit("join", roomHash);
+    VideoChat.socket.emit("join", roomHash, VideoChat.uuid);
     // Add listeners to the websocket
     VideoChat.socket.on("full", chatRoomFull);
     VideoChat.socket.on("offer", VideoChat.onOffer);
@@ -104,38 +113,42 @@ var VideoChat = {
   },
 
   // When we are ready to call, enable the Call button.
-  readyToCall: function (event) {
+  readyToCall: function (room, uuid) {
     logIt("readyToCall");
     // First to join call will most likely initiate call
     if (VideoChat.willInitiateCall) {
       logIt("Initiating call");
-      VideoChat.startCall();
+      VideoChat.startCall(uuid);
     }
   },
 
   // Set up a callback to run when we have the ephemeral token to use Twilio's TURN server.
-  startCall: function (event) {
+  startCall: function (uuid) {
     logIt("startCall >>> Sending token request...");
-    VideoChat.socket.on("token", VideoChat.onToken(VideoChat.createOffer));
-    VideoChat.socket.emit("token", roomHash);
+    VideoChat.socket.on("token", VideoChat.onToken(function() {VideoChat.createOffer(uuid)}));
+    VideoChat.socket.emit("token", roomHash, uuid);
   },
 
   // When we receive the ephemeral token back from the server.
   onToken: function (callback) {
     logIt("onToken");
-    return function (token) {
+    return function (token, uuid) {
       logIt("<<< Received token");
       // Set up a new RTCPeerConnection using the token's iceServers.
-      VideoChat.peerConnection = new RTCPeerConnection({
+      VideoChat.peerConnections[uuid] = new RTCPeerConnection({
         iceServers: token.iceServers,
       });
+
+      console.log(token, uuid)
+      console.log(VideoChat.peerConnections);
+
       // Add the local video stream to the peerConnection.
       VideoChat.localStream.getTracks().forEach(function (track) {
-        VideoChat.peerConnection.addTrack(track, VideoChat.localStream);
+        VideoChat.peerConnections[uuid].addTrack(track, VideoChat.localStream);
       });
       // Add general purpose data channel to peer connection,
       // used for text chats, captions, and toggling sending captions
-      dataChanel = VideoChat.peerConnection.createDataChannel("chat", {
+      dataChanel = VideoChat.peerConnections[uuid].createDataChannel("chat", {
         negotiated: true,
         // both peers must have same id
         id: 0,
@@ -160,8 +173,8 @@ var VideoChat = {
       };
       // Set up callbacks for the connection generating iceCandidates or
       // receiving the remote media stream.
-      VideoChat.peerConnection.onicecandidate = VideoChat.onIceCandidate;
-      VideoChat.peerConnection.onaddstream = VideoChat.onAddStream;
+      VideoChat.peerConnections[uuid].onicecandidate = VideoChat.onIceCandidate;
+      VideoChat.peerConnections[uuid].onaddstream = VideoChat.onAddStream;
       // Set up listeners on the socket
       VideoChat.socket.on("candidate", VideoChat.onCandidate);
       VideoChat.socket.on("answer", VideoChat.onAnswer);
@@ -170,8 +183,8 @@ var VideoChat = {
         recieveCaptions(captions)
       );
       // Called when there is a change in connection state
-      VideoChat.peerConnection.oniceconnectionstatechange = function (event) {
-        switch (VideoChat.peerConnection.iceConnectionState) {
+      VideoChat.peerConnections[uuid].oniceconnectionstatechange = function (event) {
+        switch (VideoChat.peerConnections[uuid].iceConnectionState) {
           case "connected":
             logIt("connected");
             // Once connected we no longer have a need for the signaling server, so disconnect
@@ -228,19 +241,19 @@ var VideoChat = {
     logIt(
       `onCandidate <<< Received remote ICE candidate (${rtcCandidate.address} - ${rtcCandidate.relatedAddress})`
     );
-    VideoChat.peerConnection.addIceCandidate(rtcCandidate);
+    VideoChat.peerConnections[0].addIceCandidate(rtcCandidate);
   },
 
   // Create an offer that contains the media capabilities of the browser.
-  createOffer: function () {
+  createOffer: function (uuid) {
     logIt("createOffer >>> Creating offer...");
-    VideoChat.peerConnection.createOffer(
+    VideoChat.peerConnections[uuid].createOffer(
       function (offer) {
         // If the offer is created successfully, set it as the local description
         // and send it over the socket connection to initiate the peerConnection
         // on the other side.
-        VideoChat.peerConnection.setLocalDescription(offer);
-        VideoChat.socket.emit("offer", JSON.stringify(offer), roomHash);
+        VideoChat.peerConnections[uuid].setLocalDescription(offer);
+        VideoChat.socket.emit("offer", JSON.stringify(offer), roomHash, uuid);
       },
       function (err) {
         logIt("failed offer creation");
@@ -254,15 +267,17 @@ var VideoChat = {
   // needs to be parsed into an RTCSessionDescription and added as the remote
   // description to the peerConnection object. Then the answer is created in the
   // same manner as the offer and sent over the socket.
-  createAnswer: function (offer) {
+  createAnswer: function (offer, uuid) {
     logIt("createAnswer");
     return function () {
       logIt(">>> Creating answer...");
       rtcOffer = new RTCSessionDescription(JSON.parse(offer));
-      VideoChat.peerConnection.setRemoteDescription(rtcOffer);
-      VideoChat.peerConnection.createAnswer(
+      console.log(VideoChat.peerConnections);
+      console.log(uuid);
+      VideoChat.peerConnections[uuid].setRemoteDescription(rtcOffer);
+      VideoChat.peerConnections[uuid].createAnswer(
         function (answer) {
-          VideoChat.peerConnection.setLocalDescription(answer);
+          VideoChat.peerConnections[uuid].setLocalDescription(answer);
           VideoChat.socket.emit("answer", JSON.stringify(answer), roomHash);
         },
         function (err) {
@@ -275,11 +290,12 @@ var VideoChat = {
 
   // When a browser receives an offer, set up a callback to be run when the
   // ephemeral token is returned from Twilio.
-  onOffer: function (offer) {
+  onOffer: function (offer, uuid) {
     logIt("onOffer <<< Received offer");
+    console.log("onoffer", uuid); // onoffer seems to be getting uuid, but createanswer seems to be getting null
     VideoChat.socket.on(
       "token",
-      VideoChat.onToken(VideoChat.createAnswer(offer))
+      VideoChat.onToken(VideoChat.createAnswer(offer, uuid))
     );
     VideoChat.socket.emit("token", roomHash);
   },
@@ -289,7 +305,7 @@ var VideoChat = {
     logIt("onAnswer <<< Received answer");
     var rtcAnswer = new RTCSessionDescription(JSON.parse(answer));
     // Set remote description of RTCSession
-    VideoChat.peerConnection.setRemoteDescription(rtcAnswer);
+    VideoChat.peerConnections[0].setRemoteDescription(rtcAnswer);
     // The caller now knows that the callee is ready to accept new ICE candidates, so sending the buffer over
     VideoChat.localICECandidates.forEach((candidate) => {
       logIt(`>>> Sending local ICE candidate (${candidate.address})`);
@@ -442,7 +458,7 @@ function windowResized() {
 function muteMicrophone() {
   var audioTrack = null;
   // Get audio track to mute
-  VideoChat.peerConnection.getSenders().find(function (s) {
+  VideoChat.peerConnections[0].getSenders().find(function (s) {
     if (s.track.kind === "audio") {
       audioTrack = s.track;
     }
@@ -470,7 +486,7 @@ function muteMicrophone() {
 function pauseVideo() {
   var videoTrack = null;
   // Get video track to pause
-  VideoChat.peerConnection.getSenders().find(function (s) {
+  VideoChat.peerConnections[0].getSenders().find(function (s) {
     if (s.track.kind === "video") {
       videoTrack = s.track;
     }
@@ -574,7 +590,7 @@ function switchStreamHelper(stream) {
   };
   if (VideoChat.connected) {
     // Find sender
-    const sender = VideoChat.peerConnection.getSenders().find(function (s) {
+    const sender = VideoChat.peerConnections[0].getSenders().find(function (s) {
       // make sure tack types match
       return s.track.kind === videoTrack.kind;
     });
