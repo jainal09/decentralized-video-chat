@@ -124,9 +124,8 @@ a {
   left: 50%;
   -ms-transform: translate(-50%, -50%);
   transform: translate(-50%, -50%);
-  width: 100%;
+  width: 90vw;
   max-height: 90vh;
-  max-width: 100%;
 }
 
 /*caption text*/
@@ -143,12 +142,13 @@ a {
   font-weight: bold;
   text-align: left;
   background: rgba(0, 0, 0, 0.2);
+  width: min(calc(40vh*4/3), 50vw);
   border-radius: 0 0 10px 10px;
   padding: 10px;
 }
 #remote-video:first-child:nth-last-child(1) {
-  width: min(calc(80vh * 4/3), 80vw);
   max-height: 80vh;
+  width: min(calc(80vh * 4/3), 80vw);
 }
 
 /* two items */
